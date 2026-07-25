@@ -55,8 +55,10 @@ docker buildx build \
 ```
 
 `scripts/publish_image.sh` passes configured `HTTP_PROXY`, `HTTPS_PROXY`, and
-`NO_PROXY` values as ephemeral BuildKit secrets when they are present; proxy
-values are not Docker build arguments, image environment, or provenance data.
+`NO_PROXY` values as ephemeral BuildKit secrets when they are present. When it
+creates a `docker-container` builder, it also configures the builder daemon's
+registry resolver with those values. Proxy values are not Docker build
+arguments, image environment, or provenance data.
 
 `scripts/prepare_models.sh` rejects symlinks, unexpected files, missing files,
 and any SHA-256 mismatch. The Dockerfile also repeats manifest verification

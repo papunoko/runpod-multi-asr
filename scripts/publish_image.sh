@@ -49,19 +49,24 @@ fi
 mkdir -p -- "$ARTIFACT_DIR" "$EVIDENCE_DIR"
 
 PROXY_SECRET_ARGS=()
+BUILDER_DRIVER_OPTS=()
 if [[ -n "${HTTP_PROXY:-}" ]]; then
   PROXY_SECRET_ARGS+=(--secret "id=http_proxy,env=HTTP_PROXY")
+  BUILDER_DRIVER_OPTS+=(--driver-opt "env.HTTP_PROXY=$HTTP_PROXY")
 fi
 if [[ -n "${HTTPS_PROXY:-}" ]]; then
   PROXY_SECRET_ARGS+=(--secret "id=https_proxy,env=HTTPS_PROXY")
+  BUILDER_DRIVER_OPTS+=(--driver-opt "env.HTTPS_PROXY=$HTTPS_PROXY")
 fi
 if [[ -n "${NO_PROXY:-}" ]]; then
   PROXY_SECRET_ARGS+=(--secret "id=no_proxy,env=NO_PROXY")
+  BUILDER_DRIVER_OPTS+=(--driver-opt "env.NO_PROXY=$NO_PROXY")
 fi
 
 "$SCRIPT_DIR/verify_models.sh"
 docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1 || \
-  docker buildx create --name "$BUILDER_NAME" --driver docker-container
+  docker buildx create --name "$BUILDER_NAME" --driver docker-container \
+    "${BUILDER_DRIVER_OPTS[@]}"
 docker buildx inspect "$BUILDER_NAME" --bootstrap >/dev/null
 
 # This is the only release build. Push directly from BuildKit without importing
@@ -77,7 +82,7 @@ docker buildx build \
   --build-arg "IMAGE_VERSION=$IMAGE_VERSION" \
   --provenance=mode=max \
   --sbom=true \
-  --output "type=image,name=$IMAGE_REPOSITORY:$STAGING_TAG,push=true,store=false,compression=zstd,compression-level=1,force-compression=true,oci-mediatypes=true" \
+  --output "type=image,name=$IMAGE_REPOSITORY:$STAGING_TAG,push=true,store=false,compression=zstd,compression-level=1,oci-mediatypes=true" \
   --metadata-file "$METADATA_REPORT" .
 
 IMAGE_DIGEST="$(jq -r '."containerimage.digest"' "$METADATA_REPORT")"
