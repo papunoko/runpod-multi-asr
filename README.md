@@ -75,7 +75,9 @@ into the image. From a clean source commit, run:
 
 The script performs one BuildKit build into a private GHCR staging tag, with an
 SBOM and maximum provenance. It pushes OCI zstd layers directly to the registry
-without importing the large image into the builder's local image store. It reads
+without importing the large image into the builder's local image store. Runtime
+compatibility is accepted only after a representative Runpod digest-pull and
+startup smoke test. The script reads
 the resulting digest, proves the staging manifest is not anonymously readable,
 and scans that exact remote digest for
 fixable HIGH/CRITICAL OS and Python-library CVEs. Model snapshot directories are

@@ -66,7 +66,7 @@ docker buildx inspect "$BUILDER_NAME" --bootstrap >/dev/null
 
 # This is the only release build. Push directly from BuildKit without importing
 # the very large image into the daemon's containerd store. Fast zstd compression
-# keeps the model layers practical to export and is supported by OCI runtimes.
+# keeps the model layers practical to export for zstd-capable OCI runtimes.
 # The pushed index includes the runnable image, BuildKit provenance, and SBOM
 # attestations under one immutable digest.
 docker buildx build \
