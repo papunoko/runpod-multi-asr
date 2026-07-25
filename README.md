@@ -66,8 +66,8 @@ transitive Python dependencies are hash-locked per environment.
 
 ## Publication contract
 
-Release publication uses two source commits. The first, root commit is the exact
-source built into the image. From that clean commit, run:
+Release publication binds an evidence commit to the exact source commit built
+into the image. From a clean source commit, run:
 
 ```bash
 ./scripts/publish_image.sh v1.0.0
@@ -76,17 +76,22 @@ source built into the image. From that clean commit, run:
 The script performs one BuildKit build into a private GHCR staging tag, with an
 SBOM and maximum provenance. It reads the resulting digest, proves the staging
 manifest is not anonymously readable, and scans that exact remote digest for
-fixable HIGH/CRITICAL OS and library CVEs. Only after a clean scan does it copy
-the same index digest to the semantic-version and source-revision tags. It then
-generates `release-evidence/v1.0.0/{release.json,trivy.json}`.
+fixable HIGH/CRITICAL OS and Python-library CVEs. Model snapshot directories are
+excluded from Trivy because their files are not installed packages and are
+independently verified against committed SHA-256 manifests. Only after a clean
+scan does the script copy the same index digest to the semantic-version and
+source-revision tags. It then generates
+`release-evidence/v1.0.0/{release.json,trivy.json}`.
 
-Commit only those two evidence files as the second commit and tag that evidence
-commit `v1.0.0`. Dispatch `container.yml` on the tag with the exact image digest.
+Commit only those two evidence files in the immediately following commit and tag
+that evidence commit `v1.0.0`. Dispatch `container.yml` on the tag with the exact
+image digest.
 The workflow requires the tag commit to contain only the two evidence files,
-requires its parent to be the root source commit recorded in the image labels
-and provenance, verifies the remote SBOM, and independently rescans the exact
-remote digest before signing it with GitHub OIDC. The GHCR package stays private
-until this gate and signature verification have succeeded.
+requires its parent to be the source commit recorded in the image labels and
+provenance, and requires the complete public history to use the repository
+owner's GitHub noreply identity. It verifies the remote SBOM and independently
+rescans the exact remote digest before signing it with GitHub OIDC. The GHCR
+package stays private until this gate and signature verification have succeeded.
 
 Runpod clients must use the digest-pinned reference recorded in their reviewed
 allowlist; a mutable tag alone is never accepted.

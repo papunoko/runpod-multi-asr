@@ -3,14 +3,6 @@ FROM ghcr.io/astral-sh/uv:0.11.29@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04@sha256:ac55d124da4882b497f732d8dfd9a702d5447a5f29d08d56da6f64f0a1eb34bc
 
 ARG UBUNTU_SNAPSHOT=20260723T000000Z
-ARG SOURCE_REVISION=unknown
-ARG IMAGE_VERSION=dev
-
-LABEL org.opencontainers.image.source="https://github.com/papunoko/runpod-multi-asr" \
-      org.opencontainers.image.description="Offline three-model Japanese meeting ASR worker for Runpod Pods" \
-      org.opencontainers.image.licenses="MIT AND Apache-2.0" \
-      org.opencontainers.image.revision="$SOURCE_REVISION" \
-      org.opencontainers.image.version="$IMAGE_VERSION"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -126,6 +118,14 @@ COPY LICENSE /opt/multi-asr/LICENSE
 RUN chmod 0555 /opt/multi-asr/pipeline/deploy/run_backend.sh \
     && /opt/venvs/whisper/bin/python -m compileall -q /opt/multi-asr \
     && mkdir -p /workspace/multi-asr/jobs
+
+ARG SOURCE_REVISION=unknown
+ARG IMAGE_VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/papunoko/runpod-multi-asr" \
+      org.opencontainers.image.description="Offline three-model Japanese meeting ASR worker for Runpod Pods" \
+      org.opencontainers.image.licenses="MIT AND Apache-2.0" \
+      org.opencontainers.image.revision="$SOURCE_REVISION" \
+      org.opencontainers.image.version="$IMAGE_VERSION"
 
 EXPOSE 8000
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/venvs/whisper/bin/python", "/opt/multi-asr/worker/server.py"]

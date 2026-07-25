@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Bind tag, source parent, digest, and committed evidence
         run: |
           set -Eeuo pipefail
@@ -72,8 +72,11 @@ jobs:
           SOURCE_COMMIT="$(jq -r '.sourceCommit' "$RELEASE_JSON")"
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(git rev-parse HEAD^)" == "$SOURCE_COMMIT" ]]
-          [[ "$(git rev-list --parents -n 1 "$SOURCE_COMMIT" | wc -w)" -eq 1 ]]
           [[ "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2 ]]
+          git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD
+          while IFS= read -r email; do
+            [[ "$email" == "47289895+papunoko@users.noreply.github.com" ]]
+          done < <(git log --format='%ae%n%ce' HEAD)
 
           EXPECTED_IMAGE="$IMAGE_REPOSITORY:$RELEASE_TAG@$IMAGE_DIGEST"
           EXPECTED_SUBJECT="$IMAGE_REPOSITORY@$IMAGE_DIGEST"
@@ -140,6 +143,8 @@ jobs:
           set -Eeuo pipefail
           trivy image \
             --image-src remote \
+            --parallel 1 \
+            --skip-dirs /opt/models \
             --exit-code 1 \
             --ignore-unfixed \
             --scanners vuln \

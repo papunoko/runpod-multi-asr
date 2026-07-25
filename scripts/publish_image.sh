@@ -115,6 +115,8 @@ fi
 # Scan the exact remote subject that will later be allowlisted and signed.
 trivy image \
   --image-src remote \
+  --parallel 1 \
+  --skip-dirs /opt/models \
   --exit-code 1 \
   --ignore-unfixed \
   --scanners vuln \
