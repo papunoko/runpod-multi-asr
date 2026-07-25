@@ -64,18 +64,20 @@ docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1 || \
   docker buildx create --name "$BUILDER_NAME" --driver docker-container
 docker buildx inspect "$BUILDER_NAME" --bootstrap >/dev/null
 
-# This is the only release build. The pushed index includes the runnable image,
-# BuildKit provenance, and SBOM attestations under one immutable digest.
+# This is the only release build. Push directly from BuildKit without importing
+# the very large image into the daemon's containerd store. Fast zstd compression
+# keeps the model layers practical to export and is supported by OCI runtimes.
+# The pushed index includes the runnable image, BuildKit provenance, and SBOM
+# attestations under one immutable digest.
 docker buildx build \
   --builder "$BUILDER_NAME" \
   --platform linux/amd64 \
   "${PROXY_SECRET_ARGS[@]}" \
   --build-arg "SOURCE_REVISION=$SOURCE_REVISION" \
   --build-arg "IMAGE_VERSION=$IMAGE_VERSION" \
-  --tag "$IMAGE_REPOSITORY:$STAGING_TAG" \
   --provenance=mode=max \
   --sbom=true \
-  --push \
+  --output "type=image,name=$IMAGE_REPOSITORY:$STAGING_TAG,push=true,store=false,compression=zstd,compression-level=1,force-compression=true,oci-mediatypes=true" \
   --metadata-file "$METADATA_REPORT" .
 
 IMAGE_DIGEST="$(jq -r '."containerimage.digest"' "$METADATA_REPORT")"

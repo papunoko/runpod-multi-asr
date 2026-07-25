@@ -74,8 +74,10 @@ into the image. From a clean source commit, run:
 ```
 
 The script performs one BuildKit build into a private GHCR staging tag, with an
-SBOM and maximum provenance. It reads the resulting digest, proves the staging
-manifest is not anonymously readable, and scans that exact remote digest for
+SBOM and maximum provenance. It pushes OCI zstd layers directly to the registry
+without importing the large image into the builder's local image store. It reads
+the resulting digest, proves the staging manifest is not anonymously readable,
+and scans that exact remote digest for
 fixable HIGH/CRITICAL OS and Python-library CVEs. Model snapshot directories are
 excluded from Trivy because their files are not installed packages and are
 independently verified against committed SHA-256 manifests. Only after a clean
