@@ -1,0 +1,4 @@
+huggingface-hub==0.36.2
+qwen-asr==0.0.6
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128

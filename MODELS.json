@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "backends": [
+    {
+      "id": "faster_whisper",
+      "label": "whisper-large-v3",
+      "repository": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "path": "/opt/models/whisper",
+      "manifestPath": "/opt/models/whisper/MODEL_MANIFEST.sha256",
+      "manifestSha256": "d77f300c52ad588c387495205cdc3916649043bff6401e101a3f0d9cc765769e"
+    },
+    {
+      "id": "reazon_nemo",
+      "label": "reazonspeech-nemo-v2",
+      "repository": "reazon-research/reazonspeech-nemo-v2",
+      "revision": "33693408be76b7cba9fd4a7546a0a8772430211b",
+      "path": "/opt/models/reazon",
+      "manifestPath": "/opt/models/reazon/MODEL_MANIFEST.sha256",
+      "manifestSha256": "e40b7fcbaa6c6c5fe88c9b32ba642654a4a0bf382912d6c45145fd4ebc1e0e66"
+    },
+    {
+      "id": "qwen3",
+      "label": "qwen3-asr-1.7b",
+      "repository": "Qwen/Qwen3-ASR-1.7B",
+      "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5",
+      "path": "/opt/models/qwen",
+      "manifestPath": "/opt/models/qwen/MODEL_MANIFEST.sha256",
+      "manifestSha256": "f8674bad2957791055ce14e81f72a099f0335e215155a2148f1ded965f7b3e97"
+    }
+  ]
+}

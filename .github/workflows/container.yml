@@ -1,0 +1,161 @@
+name: container
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: "Exact scanned and attested GHCR image digest"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  source-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install hash-locked worker dependencies
+        run: python -m pip install --require-hashes --requirement requirements/whisper.txt
+      - name: Check fixed launchers and release scripts
+        run: |
+          set -Eeuo pipefail
+          bash -n pipeline/deploy/run_backend.sh
+          bash -n scripts/prepare_models.sh
+          bash -n scripts/publish_image.sh
+          bash -n scripts/verify_models.sh
+      - name: Compile all three backend runners
+        run: python -m compileall -q worker_core.py server.py pipeline/src tests
+      - name: Test worker contracts and HTTP boundary
+        run: python -m unittest discover -s tests -v
+
+  release-evidence:
+    if: github.event_name == 'workflow_dispatch'
+    needs: source-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE_DIGEST: ${{ inputs.image_digest }}
+      IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/runpod-multi-asr
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+      - name: Bind tag, source parent, digest, and committed evidence
+        run: |
+          set -Eeuo pipefail
+          [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          RELEASE_TAG="${GITHUB_REF#refs/tags/}"
+          EVIDENCE_DIR="release-evidence/$RELEASE_TAG"
+          RELEASE_JSON="$EVIDENCE_DIR/release.json"
+          TRIVY_JSON="$EVIDENCE_DIR/trivy.json"
+          [[ -f "$RELEASE_JSON" && ! -L "$RELEASE_JSON" ]]
+          [[ -f "$TRIVY_JSON" && ! -L "$TRIVY_JSON" ]]
+
+          mapfile -t changed_paths < <(git diff --name-only HEAD^ HEAD)
+          [[ "${#changed_paths[@]}" -eq 2 ]]
+          printf '%s\n' "${changed_paths[@]}" | sort > /tmp/changed-paths
+          printf '%s\n' "$RELEASE_JSON" "$TRIVY_JSON" | sort > /tmp/expected-paths
+          cmp /tmp/changed-paths /tmp/expected-paths
+
+          SOURCE_COMMIT="$(jq -r '.sourceCommit' "$RELEASE_JSON")"
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD^)" == "$SOURCE_COMMIT" ]]
+          [[ "$(git rev-list --parents -n 1 "$SOURCE_COMMIT" | wc -w)" -eq 1 ]]
+          [[ "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2 ]]
+
+          EXPECTED_IMAGE="$IMAGE_REPOSITORY:$RELEASE_TAG@$IMAGE_DIGEST"
+          EXPECTED_SUBJECT="$IMAGE_REPOSITORY@$IMAGE_DIGEST"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg source "$SOURCE_COMMIT" \
+            --arg repository "$IMAGE_REPOSITORY" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg image "$EXPECTED_IMAGE" \
+            --arg subject "$EXPECTED_SUBJECT" \
+            --arg report "$TRIVY_JSON" '
+              .schemaVersion == 1 and
+              .tag == $tag and
+              .sourceCommit == $source and
+              .imageRepository == $repository and
+              .imageDigest == $digest and
+              .image == $image and
+              .stagingVisibilityDuringScan == "private" and
+              .scan.subject == $subject and
+              .scan.report == $report and
+              .scan.trivyVersion == "0.72.0" and
+              .scan.fixableHighOrCriticalCves == 0 and
+              .attestations.provenancePresent == true and
+              (.attestations.provenanceSha256 | test("^[0-9a-f]{64}$")) and
+              .attestations.sbomPresent == true and
+              (.attestations.sbomSha256 | test("^[0-9a-f]{64}$"))
+            ' "$RELEASE_JSON" >/dev/null
+
+          [[ "$(sha256sum MODELS.json | cut -d' ' -f1)" == \
+            "$(jq -r '.modelsSha256' "$RELEASE_JSON")" ]]
+          [[ "$(sha256sum "$TRIVY_JSON" | cut -d' ' -f1)" == \
+            "$(jq -r '.scan.reportSha256' "$RELEASE_JSON")" ]]
+          [[ "$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$TRIVY_JSON")" == "0" ]]
+
+          printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG" >> "$GITHUB_ENV"
+          printf 'SOURCE_COMMIT=%s\n' "$SOURCE_COMMIT" >> "$GITHUB_ENV"
+          printf 'EXACT_IMAGE=%s\n' "$EXPECTED_SUBJECT" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require exact remote provenance, SBOM, and source revision
+        run: |
+          set -Eeuo pipefail
+          docker buildx imagetools inspect "$EXACT_IMAGE" >/dev/null
+          docker buildx imagetools inspect \
+            --format '{{json .Provenance}}' "$EXACT_IMAGE" > /tmp/provenance.json
+          docker buildx imagetools inspect \
+            --format '{{json .SBOM}}' "$EXACT_IMAGE" > /tmp/sbom.json
+          docker buildx imagetools inspect \
+            --format '{{json .Image}}' "$EXACT_IMAGE" > /tmp/image.json
+          jq -e 'type == "object" and length > 0' /tmp/provenance.json >/dev/null
+          jq -e 'type == "object" and length > 0' /tmp/sbom.json >/dev/null
+          grep -Fq -- "$SOURCE_COMMIT" /tmp/provenance.json
+          grep -Fq -- "$SOURCE_COMMIT" /tmp/image.json
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
+        with:
+          version: v0.72.0
+          cache: true
+      - name: Independently rescan the exact remote digest
+        run: |
+          set -Eeuo pipefail
+          trivy image \
+            --image-src remote \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --scanners vuln \
+            --vuln-type os,library \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output /tmp/ci-trivy.json \
+            "$EXACT_IMAGE"
+          [[ "$(jq '[.Results[]?.Vulnerabilities[]?] | length' /tmp/ci-trivy.json)" == "0" ]]
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac
+      - name: Sign the verified immutable image digest with GitHub OIDC
+        run: cosign sign --yes "$EXACT_IMAGE"
+      - name: Verify the workflow-bound signature
+        run: >-
+          cosign verify
+          --certificate-identity-regexp
+          "^https://github.com/${{ github.repository }}/.github/workflows/container.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          "$EXACT_IMAGE"
