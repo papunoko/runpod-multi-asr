@@ -60,7 +60,6 @@ if [[ -n "${HTTPS_PROXY:-}" ]]; then
 fi
 if [[ -n "${NO_PROXY:-}" ]]; then
   PROXY_SECRET_ARGS+=(--secret "id=no_proxy,env=NO_PROXY")
-  BUILDER_DRIVER_OPTS+=(--driver-opt "env.NO_PROXY=$NO_PROXY")
 fi
 
 "$SCRIPT_DIR/verify_models.sh"
